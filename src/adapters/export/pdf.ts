@@ -10,6 +10,7 @@ export const exportPatientPdf = (patient: Patient, result: TriageResult) => {
   const margin = 40
   let y = margin
   const aiClinicalSuspicion = result.ai?.json?.sospecha_clinica?.map((item) => item.trim()).filter(Boolean) ?? []
+  const aiPriorityJustification = result.ai?.json?.motivo_prioridad?.trim()
 
   doc.setFontSize(18)
   doc.text('TRIAJE - Informe de Triaje', margin, y)
@@ -27,6 +28,7 @@ export const exportPatientPdf = (patient: Patient, result: TriageResult) => {
     `Categoría: ${patient.assessment?.categoriaClinica || 'ND'}`,
     `Dolor EVA: ${patient.assessment?.dolor !== undefined ? `${patient.assessment.dolor}/10` : 'ND'}`,
     `Prioridad orientativa: ${result.priority} - ${result.reason}`,
+    ...(aiPriorityJustification ? [`Justificación de prioridad (IA): ${aiPriorityJustification}`] : []),
     ...(aiClinicalSuspicion.length ? [`Sospecha clínica orientativa (IA): ${aiClinicalSuspicion.join('; ')}`] : []),
     `Signos de alarma presentes: ${result.redFlagsPresent.join('; ')}`,
     `Actuaciones enfermeras: ${result.actions.join('; ')}`,

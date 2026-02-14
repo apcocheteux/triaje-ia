@@ -23,7 +23,11 @@
         </div>
         <div class="priority-output-value">P{{ result.priority }}</div>
         <div class="priority-output-name">{{ priorityInfo?.label }}</div>
-        <div class="priority-output-reason">{{ result.reason }}</div>
+        <div class="priority-output-justification-head">
+          Justificación de prioridad
+          <span v-if="hasAiPriorityJustification" class="ia-indicator">✨ IA</span>
+        </div>
+        <div class="priority-output-reason">{{ priorityJustification }}</div>
         <div class="priority-output-time">Dolor EVA actual: {{ assessment?.dolor ?? 'ND' }}/10</div>
         <div class="priority-output-time">
           Tiempo máximo recomendado (orientativo): {{ priorityInfo?.waitLabel }}
@@ -207,10 +211,13 @@ const aiActuacionesPriorizadas = computed(() => aiJson.value?.actuaciones_priori
 const aiObjetivosMonitorizacion = computed(() => aiJson.value?.objetivos_monitorizacion ?? [])
 const aiCriteriosEscalada = computed(() => aiJson.value?.criterios_escalada ?? [])
 const aiPreguntasClave = computed(() => aiJson.value?.preguntas_clave ?? [])
+const aiPriorityJustification = computed(() => aiJson.value?.motivo_prioridad?.trim() ?? '')
+const hasAiPriorityJustification = computed(() => Boolean(aiPriorityJustification.value))
 const aiClinicalSuspicion = computed(() =>
   Array.from(new Set((aiJson.value?.sospecha_clinica ?? []).map((item) => item.trim()).filter(Boolean)))
 )
 const hasAiClinicalSuspicion = computed(() => aiClinicalSuspicion.value.length > 0)
+const priorityJustification = computed(() => aiPriorityJustification.value || result.value?.reason || 'Sin datos para justificar prioridad.')
 const nowMs = ref(Date.now())
 
 const clinicalSuspicionByArea: Record<ClinicalArea, string> = {
