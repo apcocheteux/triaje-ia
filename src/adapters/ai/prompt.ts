@@ -13,13 +13,18 @@ Reglas:
 - Si faltan datos clave, NO inventes: indícalos en “Datos faltantes”.
 - No des indicaciones médicas (tratamientos farmacológicos). Limítate a ACTUACIONES ENFERMERAS iniciales habituales y seguras.
 - Incluye una SOSPECHA CLÍNICA orientativa (pre-diagnóstico diferencial corto), sin afirmar diagnósticos definitivos.
-- Prioridad: usa una escala 1–5 (1 = inmediata/critica, 2 = muy urgente, 3 = urgente, 4 = menos urgente, 5 = no urgente).
+- La prioridad debe basarse en SET como referencia principal: 1 Reanimación, 2 Emergencia, 3 Urgencia, 4 Prioritario, 5 No urgente.
 - En actuaciones de enfermería, prioriza por tiempo y operatividad (0-5 min, 5-15 min, 15-30 min).
 - Añade recomendaciones de monitorización y criterios de escalada clínicos claros.
+- Limita la longitud: texto breve y operativo.
+- "resumen_clinico": entre 45 y 90 palabras.
+- Resto de strings: máximo 18 palabras.
+- Máximo 4 elementos por array.
+- "preguntas_clave" deben ser preguntas clínicas reales, redactadas en formato interrogativo (¿...?).
 - Sé breve, claro y operativo.
 
 Salida obligatoria:
-1) Devuelve un JSON válido (sin markdown) con el siguiente esquema exacto:
+Devuelve SOLO un JSON válido (sin markdown ni texto adicional) con el siguiente esquema exacto:
 {
   "resumen_clinico": "",
   "sospecha_clinica": [""],
@@ -35,7 +40,7 @@ Salida obligatoria:
   "datos_faltantes": [""],
   "evolutivo_triaje": ""
 }
-2) Después del JSON, añade una línea en blanco y un bloque de texto titulado "EVOLUTIVO" con el texto clínico listo para pegar.
+No añadas texto fuera del JSON.
 
 Datos del paciente:
 - Edad: ${patient.demographics.edad} años

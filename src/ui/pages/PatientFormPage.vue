@@ -28,14 +28,6 @@
         <label class="input">Peso (kg)
           <input v-model.number="form.demographics.pesoKg" type="number" min="0" step="0.1" />
         </label>
-        <label class="input">Estado
-          <select v-model="form.status">
-            <option value="en_espera">En espera</option>
-            <option value="en_triaje">En triaje</option>
-            <option value="en_observacion">Observación</option>
-            <option value="alta">Alta</option>
-          </select>
-        </label>
       </div>
     </div>
 
@@ -44,18 +36,23 @@
       <div class="grid grid-2">
         <label class="input">Antecedentes
           <textarea v-model="form.clinical.antecedentes" placeholder="HTA, DM2, etc."></textarea>
+          <button type="button" class="text-shortcut" @click="setNoPresenta('antecedentes')">No presenta</button>
         </label>
         <label class="input">Alergias
           <textarea v-model="form.clinical.alergias" placeholder="Alergias conocidas"></textarea>
+          <button type="button" class="text-shortcut" @click="setNoPresenta('alergias')">No presenta</button>
         </label>
         <label class="input">Medicación habitual
           <textarea v-model="form.clinical.medicacion" placeholder="Tratamiento crónico"></textarea>
+          <button type="button" class="text-shortcut" @click="setNoPresenta('medicacion')">No presenta</button>
         </label>
         <label class="input">Vacunación
           <textarea v-model="form.clinical.vacunacion" placeholder="Calendario o estado vacunal"></textarea>
+          <button type="button" class="text-shortcut" @click="setNoPresenta('vacunacion')">No presenta</button>
         </label>
         <label class="input">Riesgos sociales
           <textarea v-model="form.clinical.riesgosSociales" placeholder="Vive solo, dependencia, etc."></textarea>
+          <button type="button" class="text-shortcut" @click="setNoPresenta('riesgosSociales')">No presenta</button>
         </label>
       </div>
     </div>
@@ -63,14 +60,23 @@
     <div class="card">
       <h2 class="card-title">Embarazo</h2>
       <div class="grid grid-3">
-        <label class="input">Estado
-          <select v-model="form.clinical.embarazo">
-            <option value="desconocido">Desconocido</option>
-            <option value="no">No</option>
-            <option value="si">Sí</option>
-          </select>
-        </label>
-        <label class="input">Semanas de gestación
+        <div class="input">
+          <span>Situación gestacional</span>
+          <div class="pregnancy-toggle" role="radiogroup" aria-label="Situación de embarazo">
+            <button
+              v-for="option in pregnancyOptions"
+              :key="option.value"
+              type="button"
+              class="pregnancy-option"
+              :class="{ active: form.clinical.embarazo === option.value }"
+              :aria-pressed="form.clinical.embarazo === option.value"
+              @click="form.clinical.embarazo = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+        <label v-if="form.clinical.embarazo === 'si'" class="input">Semanas de gestación
           <input v-model.number="form.clinical.semanasEmbarazo" type="number" min="0" />
         </label>
       </div>
@@ -84,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed } from 'vue'
+import { reactive, computed, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useAppStore, createEmptyPatient } from '../../application/store'
 import { safeClone } from '../../application/safeClone'
@@ -98,8 +104,28 @@ const id = computed(() => route.params.id as string | undefined)
 const existing = id.value ? store.patientById(id.value) : undefined
 
 const form = reactive<Patient>(existing ? safeClone(existing) : createEmptyPatient())
+const pregnancyOptions: { value: 'desconocido' | 'no' | 'si'; label: string }[] = [
+  { value: 'desconocido', label: 'Desconocido' },
+  { value: 'no', label: 'No' },
+  { value: 'si', label: 'Sí' },
+]
+type ClinicalTextField = 'antecedentes' | 'alergias' | 'medicacion' | 'vacunacion' | 'riesgosSociales'
 
 const isEdit = computed(() => Boolean(existing))
+
+watch(
+  () => form.clinical.embarazo,
+  (value) => {
+    if (value !== 'si') {
+      form.clinical.semanasEmbarazo = undefined
+    }
+  },
+  { immediate: true }
+)
+
+const setNoPresenta = (field: ClinicalTextField) => {
+  form.clinical[field] = 'No presenta'
+}
 
 const handleSave = () => {
   const snapshot = safeClone(form)

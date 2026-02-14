@@ -2,7 +2,10 @@
   <div class="page">
     <div class="hero">
       <div>
-        <h1 class="page-title">TR<span class="brand-title-accent">IA</span>JE: triaje rápido, claro y basado en protocolos</h1>
+        <div class="hero-title-row">
+          <img :src="appLogo" alt="Logo TRIAJE" class="hero-title-logo" />
+          <h1 class="page-title">TR<span class="brand-title-accent">IA</span>JE: triaje rápido, claro y basado en protocolos</h1>
+        </div>
         <p class="page-subtitle">
           Herramienta académica para priorizar pacientes, documentar el evolutivo y sugerir actuaciones enfermeras
           iniciales de forma segura.
@@ -59,6 +62,7 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import { useAppStore } from '../../application/store'
+import appLogo from '../../assets/logo-app.png'
 
 const store = useAppStore()
 

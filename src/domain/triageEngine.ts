@@ -58,6 +58,60 @@ const ageBandLabel = (ageYears: number) => {
   }
 }
 
+const dedupeList = (values: string[]) => Array.from(new Set(values.map((item) => item.trim()).filter(Boolean)))
+
+const formatSigns = (result: TriageResult) => {
+  const aiSigns = result.ai?.json?.red_flags_presentes ?? []
+  const signs = dedupeList(aiSigns.length ? aiSigns : result.redFlagsPresent)
+  if (!signs.length) return 'no referidos'
+  return signs.join(', ')
+}
+
+const formatActions = (result: TriageResult) => {
+  const aiActions = result.ai?.json?.actuaciones_enfermeras ?? []
+  const actions = dedupeList(aiActions.length ? aiActions : result.actions).slice(0, 4)
+  if (!actions.length) return 'Sin actuaciones específicas registradas'
+  return actions.join('; ')
+}
+
+export const buildReadableEvolutivo = (patient: Patient, assessment: TriageAssessment, result: TriageResult) => {
+  const timestamp = result.triageAt ? new Date(result.triageAt).toLocaleString('es-ES') : new Date().toLocaleString('es-ES')
+  const ageBand = ageBandLabel(patient.demographics.edad)
+  const gcs = resolveGlasgowScore(assessment)
+  const gcsBreakdown = assessment.glasgow
+    ? ` (O${assessment.glasgow.ocular ?? '-'} V${assessment.glasgow.verbal ?? '-'} M${assessment.glasgow.motor ?? '-'})`
+    : ''
+  const priorityReason = result.ai?.json?.motivo_prioridad?.trim() || result.reason
+
+  const lines = [
+    `${timestamp} - Paciente ${patient.demographics.edad} años (${ageBand}), sexo ${patient.demographics.sexo || 'no especificado'}.`,
+    `Motivo: ${assessment.motivoConsulta || 'ND'}. Categoría: ${assessment.categoriaClinica}.`,
+    `Constantes: FC ${formatValue(assessment.constantes.hr)} lpm, FR ${formatValue(assessment.constantes.rr)} rpm, TA ${formatValue(assessment.constantes.sbp)}/${formatValue(
+      assessment.constantes.dbp
+    )} mmHg, SatO2 ${formatValue(assessment.constantes.spo2)}%, Temp ${formatValue(assessment.constantes.temp)}°C, GCS ${
+      gcs === undefined ? 'ND' : gcs
+    }${gcsBreakdown}. Dolor EVA ${formatEva(assessment.dolor)}.`,
+    `Signos de alarma: ${formatSigns(result)}.`,
+    `Prioridad orientativa ${result.priority}: ${priorityReason}.`,
+  ]
+
+  if (result.priorityModifiedByAi && result.deterministicPriority) {
+    lines.push(
+      `Resultado modificado por IA según criterio SET orientativo. Prioridad original determinista: P${result.deterministicPriority}${
+        result.deterministicReason ? ` (${result.deterministicReason})` : ''
+      }.`
+    )
+  }
+
+  lines.push(`Actuaciones enfermeras: ${formatActions(result)}.`)
+
+  if (result.missingData.length) {
+    lines.push(`Datos pendientes: ${result.missingData.join(', ')}.`)
+  }
+
+  return lines.join('\n')
+}
+
 export const computeTriage = (assessment: TriageAssessment, patient: Patient): TriageResult => {
   const missingData = computeMissingData(assessment)
   const age = patient.demographics.edad
@@ -66,12 +120,10 @@ export const computeTriage = (assessment: TriageAssessment, patient: Patient): T
   const reasons: Record<Priority, string[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] }
 
   const redFlagsPresent: string[] = []
-  const selectedLabels: string[] = []
   const selectedFlags = new Set(assessment.redFlags)
   redFlagCatalog.forEach((flag) => {
     if (selectedFlags.has(flag.id)) {
       redFlagsPresent.push(flag.label)
-      selectedLabels.push(flag.label)
       if (flag.level === 1) reasons[1].push(flag.label)
       if (flag.level === 2) reasons[2].push(flag.label)
       if (flag.level === 3) reasons[3].push(flag.label)
@@ -118,50 +170,16 @@ export const computeTriage = (assessment: TriageAssessment, patient: Patient): T
     .filter((label): label is string => Boolean(label))
     .filter((label) => !uniqueRedFlags.includes(label))
 
-  const evolutivo = buildEvolutivo(patient, assessment, priority, reason, actions, missingData, selectedLabels)
-
-  return {
+  const result: TriageResult = {
     priority,
     reason,
     redFlagsPresent: uniqueRedFlags.length ? uniqueRedFlags : ['Sin signos de alarma críticos identificados'],
     redFlagsAbsent,
     actions,
     missingData,
-    evolutivo,
-  }
-}
-
-const buildEvolutivo = (
-  patient: Patient,
-  assessment: TriageAssessment,
-  priority: Priority,
-  reason: string,
-  actions: string[],
-  missingData: string[],
-  selectedLabels: string[]
-) => {
-  const now = new Date().toLocaleString('es-ES')
-  const ageBand = ageBandLabel(patient.demographics.edad)
-  const gcs = resolveGlasgowScore(assessment)
-  const gcsBreakdown = assessment.glasgow
-    ? ` (O${assessment.glasgow.ocular ?? '-'} V${assessment.glasgow.verbal ?? '-'} M${assessment.glasgow.motor ?? '-'})`
-    : ''
-  const lines = [
-    `${now} - Paciente ${patient.demographics.edad} años (${ageBand}), sexo ${patient.demographics.sexo || 'no especificado'}.`,
-    `Motivo: ${assessment.motivoConsulta || 'ND'}. Categoría: ${assessment.categoriaClinica}.`,
-    `Constantes: FC ${formatValue(assessment.constantes.hr)} lpm, FR ${formatValue(assessment.constantes.rr)} rpm, TA ${formatValue(assessment.constantes.sbp)}/${formatValue(
-      assessment.constantes.dbp
-    )} mmHg, SatO2 ${formatValue(assessment.constantes.spo2)}%, Temp ${formatValue(assessment.constantes.temp)}°C, GCS ${
-      gcs === undefined ? 'ND' : gcs
-    }${gcsBreakdown}. Dolor EVA ${formatEva(assessment.dolor)}.`,
-    `Signos de alarma: ${selectedLabels.length ? selectedLabels.join(', ') : 'no referidos'}.`,
-    `Prioridad orientativa ${priority}: ${reason}.`,
-    `Actuaciones enfermeras: ${actions.slice(0, 4).join('; ')}.`,
-  ]
-
-  if (missingData.length) {
-    lines.push(`Datos pendientes: ${missingData.join(', ')}.`)
+    evolutivo: '',
   }
 
-  return lines.join('\n')
+  result.evolutivo = buildReadableEvolutivo(patient, assessment, result)
+  return result
 }

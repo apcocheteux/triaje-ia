@@ -23,7 +23,6 @@ export const exportPatientPdf = (patient: Patient, result: TriageResult) => {
   const lines = [
     `Paciente: ${patient.demographics.nombre || ''} ${patient.demographics.apellidos || ''}`.trim() || 'Paciente sin nombre',
     `Edad: ${patient.demographics.edad} años | Sexo: ${patient.demographics.sexo || 'ND'} | Peso: ${patient.demographics.pesoKg ?? 'ND'} kg`,
-    `Estado: ${patient.status}`,
     `Motivo: ${patient.assessment?.motivoConsulta || 'ND'}`,
     `Categoría: ${patient.assessment?.categoriaClinica || 'ND'}`,
     `Dolor EVA: ${patient.assessment?.dolor !== undefined ? `${patient.assessment.dolor}/10` : 'ND'}`,

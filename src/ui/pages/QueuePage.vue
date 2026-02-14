@@ -22,7 +22,6 @@
           <tr>
             <th>Paciente</th>
             <th>Edad</th>
-            <th>Estado</th>
             <th>Categoría</th>
             <th>Prioridad</th>
             <th>Acciones</th>
@@ -39,19 +38,6 @@
               </div>
             </td>
             <td>{{ patient.demographics.edad }} años</td>
-            <td>
-              <select
-                class="select"
-                style="min-width: 140px;"
-                :value="patient.status"
-                @change="onStatusChange(patient, $event)"
-              >
-                <option value="en_espera">En espera</option>
-                <option value="en_triaje">En triaje</option>
-                <option value="en_observacion">Observación</option>
-                <option value="alta">Alta</option>
-              </select>
-            </td>
             <td>{{ areaLabel(patient.assessment?.categoriaClinica) }}</td>
             <td>
               <PriorityPill v-if="patient.result" :priority="patient.result.priority" />
@@ -78,7 +64,7 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAppStore } from '../../application/store'
 import PriorityPill from '../components/PriorityPill.vue'
-import type { Patient, PatientStatus } from '../../domain/types'
+import type { Patient } from '../../domain/types'
 import { clinicalAreas } from '../../domain/catalog'
 
 const store = useAppStore()
@@ -102,8 +88,4 @@ const patientClinicalBadges = (patient: Patient) => {
   return badges
 }
 
-const onStatusChange = (patient: Patient, event: Event) => {
-  const status = (event.target as HTMLSelectElement).value as PatientStatus
-  store.updatePatient({ ...patient, status })
-}
 </script>

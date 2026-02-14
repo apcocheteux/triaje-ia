@@ -7,9 +7,9 @@
 
     <div class="card">
       <h2 class="card-title">IA opcional (Gemini + OpenAI)</h2>
-      <label class="input">
+      <label class="input checkbox-row">
         <input type="checkbox" v-model="config.enabled" />
-        Activar IA para redacción (opcional)
+        <span>Activar IA para redacción (opcional)</span>
       </label>
       <div class="grid grid-2" style="margin-top: 12px;">
         <label class="input">Proveedor

@@ -23,6 +23,9 @@
         </div>
         <div class="priority-output-value">P{{ result.priority }}</div>
         <div class="priority-output-name">{{ priorityInfo?.label }}</div>
+        <div v-if="result.priorityModifiedByAi && result.deterministicPriority" class="priority-output-original">
+          Modificado por IA · SET original P{{ result.deterministicPriority }} ({{ deterministicPriorityInfo?.label }})
+        </div>
         <div class="priority-output-justification-head">
           Justificación de prioridad
           <span v-if="hasAiPriorityJustification" class="ia-indicator">✨ IA</span>
@@ -38,7 +41,7 @@
         <div class="priority-output-remaining" :class="remainingAttention.statusClass">
           Tiempo restante total: {{ remainingAttention.label }}
         </div>
-        <div v-if="aiJson" class="priority-ai-note">✨ IA sugiere prioridad {{ aiJson.prioridad_sugerida }}</div>
+        <div v-if="aiPriorityNote" class="priority-ai-note">{{ aiPriorityNote }}</div>
 
         <div class="priority-scale">
           <div
@@ -168,17 +171,29 @@
     </div>
 
     <div class="card">
-      <h2 class="card-title">
-        Evolutivo de triaje
-        <span v-if="aiJson" class="ia-indicator">✨ IA</span>
-      </h2>
-      <pre style="white-space: pre-wrap; font-family: 'IBM Plex Sans', sans-serif;">{{ aiJson?.evolutivo_triaje || result.evolutivo }}</pre>
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <h2 class="card-title" style="margin: 0;">
+          Evolutivo de triaje
+          <span v-if="result.ai" class="ia-indicator">✨ IA</span>
+        </h2>
+        <button type="button" class="button secondary" @click="handleCopyEvolutivo">Copiar evolutivo</button>
+      </div>
+      <pre style="white-space: pre-wrap; font-family: 'IBM Plex Sans', sans-serif;">{{ result.evolutivo }}</pre>
+      <div v-if="copyStatus === 'success'" class="notice success" style="margin-top: 10px;">
+        Evolutivo copiado al portapapeles.
+      </div>
+      <div v-else-if="copyStatus === 'error'" class="notice critical" style="margin-top: 10px;">
+        No se pudo copiar automáticamente. Revisa permisos del navegador.
+      </div>
       <details v-if="result.ai" style="margin-top: 12px;">
         <summary>Texto completo de la IA (JSON + evolutivo)</summary>
         <pre style="white-space: pre-wrap; font-family: 'IBM Plex Sans', sans-serif;">{{ result.ai.rawText }}</pre>
       </details>
       <div class="notice" style="margin-top: 12px;">
         Uso académico. Prioridad orientativa y dependiente de protocolo local.
+      </div>
+      <div class="notice" :class="aiExecutionSummary.className" style="margin-top: 10px;">
+        {{ aiExecutionSummary.label }}
       </div>
     </div>
 
@@ -213,12 +228,66 @@ const aiCriteriosEscalada = computed(() => aiJson.value?.criterios_escalada ?? [
 const aiPreguntasClave = computed(() => aiJson.value?.preguntas_clave ?? [])
 const aiPriorityJustification = computed(() => aiJson.value?.motivo_prioridad?.trim() ?? '')
 const hasAiPriorityJustification = computed(() => Boolean(aiPriorityJustification.value))
+const aiSuggestedPriority = computed(() => {
+  const value = aiJson.value?.prioridad_sugerida
+  return value === 1 || value === 2 || value === 3 || value === 4 || value === 5 ? value : undefined
+})
 const aiClinicalSuspicion = computed(() =>
   Array.from(new Set((aiJson.value?.sospecha_clinica ?? []).map((item) => item.trim()).filter(Boolean)))
 )
 const hasAiClinicalSuspicion = computed(() => aiClinicalSuspicion.value.length > 0)
 const priorityJustification = computed(() => aiPriorityJustification.value || result.value?.reason || 'Sin datos para justificar prioridad.')
+const deterministicPriorityInfo = computed(() => {
+  const originalPriority = result.value?.deterministicPriority
+  if (!originalPriority) return undefined
+  return getPriorityInfo(originalPriority)
+})
+const aiPriorityNote = computed(() => {
+  if (!aiSuggestedPriority.value) return ''
+  if (result.value?.priorityModifiedByAi) {
+    return `✨ IA ajustó la prioridad final a P${aiSuggestedPriority.value}`
+  }
+  return `✨ IA sugiere prioridad ${aiSuggestedPriority.value}`
+})
+const aiExecutionSummary = computed(() => {
+  if (result.value?.ai) {
+    const provider = result.value.aiProvider || store.config.provider
+    const model = result.value.aiModel || store.config.model
+    const latency = result.value.aiLatencyMs ? ` · ${result.value.aiLatencyMs} ms` : ''
+    return {
+      className: 'success',
+      label: `IA aplicada correctamente (${provider}/${model}${latency}).`,
+    }
+  }
+
+  if (result.value?.aiAttempted) {
+    return {
+      className: 'critical',
+      label: `IA no disponible en este triaje: ${result.value.aiError || 'error no especificado.'}`,
+    }
+  }
+
+  if (store.config.enabled && !store.config.apiKey.trim()) {
+    return {
+      className: '',
+      label: 'IA activada en configuración, pero falta API key.',
+    }
+  }
+
+  if (store.config.enabled) {
+    return {
+      className: '',
+      label: 'IA activada, pendiente de ejecución en este triaje.',
+    }
+  }
+
+  return {
+    className: '',
+    label: 'IA desactivada. Resultado generado con motor determinista.',
+  }
+})
 const nowMs = ref(Date.now())
+const copyStatus = ref<'idle' | 'success' | 'error'>('idle')
 
 const clinicalSuspicionByArea: Record<ClinicalArea, string> = {
   respiratorio: 'Proceso respiratorio agudo (infección, broncoespasmo o insuficiencia respiratoria).',
@@ -240,6 +309,7 @@ const clinicalSuspicionByArea: Record<ClinicalArea, string> = {
 }
 
 let timer: number | undefined
+let copyFeedbackTimer: number | undefined
 onMounted(() => {
   timer = window.setInterval(() => {
     nowMs.value = Date.now()
@@ -249,6 +319,9 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer) {
     clearInterval(timer)
+  }
+  if (copyFeedbackTimer) {
+    clearTimeout(copyFeedbackTimer)
   }
 })
 
@@ -353,5 +426,44 @@ const handleExportJson = () => {
   if (patient.value) {
     exportAdapter.exportPatientJson(patient.value)
   }
+}
+
+const fallbackCopyText = (text: string) => {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) {
+    throw new Error('No se pudo copiar usando fallback')
+  }
+}
+
+const handleCopyEvolutivo = async () => {
+  const text = result.value?.evolutivo?.trim()
+  if (!text) return
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      fallbackCopyText(text)
+    }
+    copyStatus.value = 'success'
+  } catch (error) {
+    console.error('[Clipboard] Error copiando evolutivo', error)
+    copyStatus.value = 'error'
+  }
+
+  if (copyFeedbackTimer) {
+    clearTimeout(copyFeedbackTimer)
+  }
+  copyFeedbackTimer = window.setTimeout(() => {
+    copyStatus.value = 'idle'
+  }, 2500)
 }
 </script>

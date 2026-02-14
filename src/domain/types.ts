@@ -75,7 +75,15 @@ export interface AiTriageResponse {
 export interface TriageResult {
   priority: Priority
   reason: string
+  deterministicPriority?: Priority
+  deterministicReason?: string
+  priorityModifiedByAi?: boolean
   triageAt?: string
+  aiAttempted?: boolean
+  aiProvider?: AiProvider
+  aiModel?: string
+  aiError?: string
+  aiLatencyMs?: number
   redFlagsPresent: string[]
   redFlagsAbsent: string[]
   actions: string[]
