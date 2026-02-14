@@ -80,6 +80,7 @@ export interface TriageResult {
   priorityModifiedByAi?: boolean
   triageAt?: string
   aiAttempted?: boolean
+  aiPending?: boolean
   aiProvider?: AiProvider
   aiModel?: string
   aiError?: string

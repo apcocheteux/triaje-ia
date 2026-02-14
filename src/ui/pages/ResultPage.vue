@@ -7,6 +7,20 @@
   </div>
 
   <div v-else class="page">
+    <div class="ai-toast-stack">
+      <div v-if="isAiPending" class="ai-toast" role="status" aria-live="polite">
+        <span class="ai-toast-spinner" aria-hidden="true"></span>
+        <div>
+          <div class="ai-toast-title">Mejorando el triaje con IA...</div>
+          <div class="ai-toast-subtitle">Mostrando resultado determinista mientras llega la IA.</div>
+        </div>
+      </div>
+      <div v-if="showAiUpdatedToast" class="ai-toast success" role="status" aria-live="polite">
+        <span aria-hidden="true">✨</span>
+        <div class="ai-toast-title">Resultado actualizado con IA.</div>
+      </div>
+    </div>
+
     <div>
       <h1 class="page-title">Resultado de triaje</h1>
       <p class="page-subtitle">Paciente {{ patient.demographics.nombre || 'sin nombre' }} · {{ patient.demographics.edad }} años</p>
@@ -206,7 +220,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAppStore } from '../../application/store'
 import { exportAdapter } from '../../adapters/export'
@@ -228,6 +242,7 @@ const aiCriteriosEscalada = computed(() => aiJson.value?.criterios_escalada ?? [
 const aiPreguntasClave = computed(() => aiJson.value?.preguntas_clave ?? [])
 const aiPriorityJustification = computed(() => aiJson.value?.motivo_prioridad?.trim() ?? '')
 const hasAiPriorityJustification = computed(() => Boolean(aiPriorityJustification.value))
+const isAiPending = computed(() => Boolean(result.value?.aiPending))
 const aiSuggestedPriority = computed(() => {
   const value = aiJson.value?.prioridad_sugerida
   return value === 1 || value === 2 || value === 3 || value === 4 || value === 5 ? value : undefined
@@ -250,6 +265,15 @@ const aiPriorityNote = computed(() => {
   return `✨ IA sugiere prioridad ${aiSuggestedPriority.value}`
 })
 const aiExecutionSummary = computed(() => {
+  if (result.value?.aiPending) {
+    const provider = result.value.aiProvider || store.config.provider
+    const model = result.value.aiModel || store.config.model
+    return {
+      className: 'loading',
+      label: `IA en ejecución (${provider}/${model}). Mostrando resultado determinista temporal.`,
+    }
+  }
+
   if (result.value?.ai) {
     const provider = result.value.aiProvider || store.config.provider
     const model = result.value.aiModel || store.config.model
@@ -288,6 +312,7 @@ const aiExecutionSummary = computed(() => {
 })
 const nowMs = ref(Date.now())
 const copyStatus = ref<'idle' | 'success' | 'error'>('idle')
+const showAiUpdatedToast = ref(false)
 
 const clinicalSuspicionByArea: Record<ClinicalArea, string> = {
   respiratorio: 'Proceso respiratorio agudo (infección, broncoespasmo o insuficiencia respiratoria).',
@@ -310,6 +335,7 @@ const clinicalSuspicionByArea: Record<ClinicalArea, string> = {
 
 let timer: number | undefined
 let copyFeedbackTimer: number | undefined
+let aiToastTimer: number | undefined
 onMounted(() => {
   timer = window.setInterval(() => {
     nowMs.value = Date.now()
@@ -323,7 +349,34 @@ onUnmounted(() => {
   if (copyFeedbackTimer) {
     clearTimeout(copyFeedbackTimer)
   }
+  if (aiToastTimer) {
+    clearTimeout(aiToastTimer)
+  }
 })
+
+watch(
+  () => result.value?.aiPending,
+  (pending, previousPending) => {
+    if (pending) {
+      showAiUpdatedToast.value = false
+      return
+    }
+
+    if (!previousPending) {
+      return
+    }
+
+    if (result.value?.ai) {
+      showAiUpdatedToast.value = true
+      if (aiToastTimer) {
+        clearTimeout(aiToastTimer)
+      }
+      aiToastTimer = window.setTimeout(() => {
+        showAiUpdatedToast.value = false
+      }, 3600)
+    }
+  }
+)
 
 const priorityScale = priorityScaleOrder.map((level) => ({
   level,

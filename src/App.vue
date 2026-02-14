@@ -11,7 +11,7 @@
           <div class="brand-title">
             TR<span class="brand-title-accent">IA</span>JE
           </div>
-          <div class="brand-subtitle">Asistente académico de triaje enfermero</div>
+          <div class="brand-subtitle">Asistente de triaje en urgencias</div>
         </div>
       </div>
 
@@ -66,10 +66,18 @@ const footerAiStatus = computed(() => {
     return { className: 'ai-warning', label: 'IA: activa (pendiente de primera ejecución)' }
   }
 
+  if (latestAiAttempt.result.aiPending) {
+    return { className: 'ai-warning', label: 'IA: procesando último triaje...' }
+  }
+
   if (latestAiAttempt.result.ai) {
     return { className: 'ai-ok', label: 'IA: operativa (último triaje OK)' }
   }
 
-  return { className: 'ai-error', label: 'IA: error en último triaje (ver resultado)' }
+  if (latestAiAttempt.result.aiError) {
+    return { className: 'ai-error', label: 'IA: error en último triaje (ver resultado)' }
+  }
+
+  return { className: 'ai-warning', label: 'IA: activa (resultado IA pendiente de sincronización)' }
 })
 </script>

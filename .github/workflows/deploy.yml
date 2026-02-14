@@ -32,6 +32,8 @@ jobs:
         env:
           NODE_ENV: production
           GITHUB_REPO: ${{ github.event.repository.name }}
+      - name: Prepare SPA fallback for refresh/direct links
+        run: cp dist/index.html dist/404.html
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

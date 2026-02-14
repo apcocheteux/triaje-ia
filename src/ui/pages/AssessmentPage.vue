@@ -7,14 +7,6 @@
   </div>
 
   <div v-else class="page">
-    <div v-if="showAiSplash" class="ai-splash" role="status" aria-live="polite" aria-busy="true">
-      <div class="ai-splash-card">
-        <div class="ai-splash-spinner" aria-hidden="true"></div>
-        <div class="ai-splash-title">Calculando prioridad con IA...</div>
-        <div class="ai-splash-subtitle">Motor: {{ aiSplashProviderLabel }}</div>
-      </div>
-    </div>
-
     <div>
       <h1 class="page-title">Evaluación de triaje</h1>
       <p class="page-subtitle">
@@ -230,10 +222,6 @@
       La IA está activada pero falta la API key en Configuración. Se usará solo el motor determinista.
     </div>
 
-    <div v-if="aiError" class="notice critical">
-      {{ aiError }}
-    </div>
-
     <div style="display: flex; gap: 12px; flex-wrap: wrap;">
       <button class="button" :disabled="loading" @click="handleTriage">
         {{ loading ? 'Procesando...' : 'Calcular triaje' }}
@@ -245,11 +233,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useAppStore } from '../../application/store'
 import { safeClone } from '../../application/safeClone'
-import type { ClinicalArea, Patient, Priority, TriageAssessment } from '../../domain/types'
+import type { AiConfig, ClinicalArea, Patient, Priority, TriageAssessment } from '../../domain/types'
 import { clinicalAreas, symptomOptions, redFlagCatalog } from '../../domain/catalog'
 import { buildReadableEvolutivo, computeMissingData, computeTriage } from '../../domain/triageEngine'
 import {
@@ -376,94 +364,106 @@ watch(
 const missingData = computed(() => computeMissingData(form))
 
 const loading = ref(false)
-const aiSplashVisible = ref(false)
-const aiSplashEligible = ref(false)
-const aiError = ref('')
-let aiSplashTimer: ReturnType<typeof setTimeout> | undefined
 const toPriority = (value: number | undefined): Priority | undefined =>
   value === 1 || value === 2 || value === 3 || value === 4 || value === 5 ? value : undefined
 
-const clearAiSplashTimer = () => {
-  if (aiSplashTimer) {
-    clearTimeout(aiSplashTimer)
-    aiSplashTimer = undefined
+const runAiInBackground = async ({
+  patientId,
+  triageAt,
+  assessmentSnapshot,
+  patientSnapshot,
+  configSnapshot,
+}: {
+  patientId: string
+  triageAt: string
+  assessmentSnapshot: TriageAssessment
+  patientSnapshot: Patient
+  configSnapshot: AiConfig
+}) => {
+  const startedAt = Date.now()
+
+  try {
+    const ai = await generateAiTriage(assessmentSnapshot, patientSnapshot, configSnapshot)
+    const currentPatient = store.patientById(patientId)
+    if (!currentPatient?.result || currentPatient.result.triageAt !== triageAt) {
+      return
+    }
+
+    const updatedResult = safeClone(currentPatient.result)
+    updatedResult.ai = ai
+    updatedResult.aiError = undefined
+    updatedResult.aiLatencyMs = Date.now() - startedAt
+    updatedResult.aiPending = false
+
+    const suggestedPriority = toPriority(ai.json?.prioridad_sugerida)
+    if (suggestedPriority && suggestedPriority !== updatedResult.priority) {
+      updatedResult.deterministicPriority = updatedResult.priority
+      updatedResult.deterministicReason = updatedResult.reason
+      updatedResult.priority = suggestedPriority
+      updatedResult.priorityModifiedByAi = true
+      const aiReason = ai.json.motivo_prioridad?.trim()
+      if (aiReason) {
+        updatedResult.reason = aiReason
+      }
+    }
+
+    const latestAssessment = currentPatient.assessment ? safeClone(currentPatient.assessment) : assessmentSnapshot
+    updatedResult.evolutivo = buildReadableEvolutivo(currentPatient, latestAssessment, updatedResult)
+    store.setResult(patientId, updatedResult)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error al usar IA'
+    const currentPatient = store.patientById(patientId)
+    if (!currentPatient?.result || currentPatient.result.triageAt !== triageAt) {
+      return
+    }
+
+    const failedResult = safeClone(currentPatient.result)
+    failedResult.aiError = message
+    failedResult.aiLatencyMs = Date.now() - startedAt
+    failedResult.aiPending = false
+    store.setResult(patientId, failedResult)
+    console.error('[IA] Error generando triaje', error)
   }
 }
 
-const showAiSplash = computed(() => loading.value && aiSplashEligible.value && aiSplashVisible.value)
-
-const aiSplashProviderLabel = computed(() => {
-  const provider = store.config.provider === 'openai' ? 'OpenAI' : 'Gemini'
-  const model = store.config.model.trim()
-  return model ? `${provider} · ${model}` : provider
-})
-
-onUnmounted(() => {
-  clearAiSplashTimer()
-})
-
 const handleTriage = async () => {
   if (!patient.value) return
-  aiError.value = ''
   loading.value = true
-  aiSplashVisible.value = false
-  aiSplashEligible.value = false
 
   try {
-    const result = computeTriage(form, patient.value)
-    result.triageAt = new Date().toISOString()
+    const patientSnapshot = safeClone(patient.value)
+    const assessmentSnapshot = safeClone(form)
+    const configSnapshot = { ...store.config }
+    const result = computeTriage(assessmentSnapshot, patientSnapshot)
+    const triageAt = new Date().toISOString()
+    result.triageAt = triageAt
     const hasApiKey = Boolean(store.config.apiKey.trim())
     const shouldUseAi = store.config.enabled && hasApiKey
     result.aiAttempted = shouldUseAi
     result.aiProvider = shouldUseAi ? store.config.provider : undefined
     result.aiModel = shouldUseAi ? store.config.model : undefined
-    aiSplashEligible.value = shouldUseAi
+    result.aiPending = shouldUseAi
 
-    if (shouldUseAi) {
-      clearAiSplashTimer()
-      aiSplashTimer = setTimeout(() => {
-        if (loading.value) {
-          aiSplashVisible.value = true
-        }
-      }, 450)
-
-      const startedAt = Date.now()
-      try {
-        const ai = await generateAiTriage(form, patient.value, store.config)
-        result.ai = ai
-        result.aiError = undefined
-        result.aiLatencyMs = Date.now() - startedAt
-
-        const suggestedPriority = toPriority(ai.json?.prioridad_sugerida)
-        if (suggestedPriority && suggestedPriority !== result.priority) {
-          result.deterministicPriority = result.priority
-          result.deterministicReason = result.reason
-          result.priority = suggestedPriority
-          result.priorityModifiedByAi = true
-          const aiReason = ai.json.motivo_prioridad?.trim()
-          if (aiReason) {
-            result.reason = aiReason
-          }
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Error al usar IA'
-        aiError.value = message
-        result.aiError = message
-        result.aiLatencyMs = Date.now() - startedAt
-        console.error('[IA] Error generando triaje', error)
-      }
-    } else if (store.config.enabled && !hasApiKey) {
+    if (store.config.enabled && !hasApiKey) {
       result.aiError = 'IA activada sin API key en Configuración.'
+      result.aiPending = false
     }
 
-    result.evolutivo = buildReadableEvolutivo(patient.value, form, result)
-    store.setAssessment(patient.value.id, safeClone(form), result)
+    result.evolutivo = buildReadableEvolutivo(patientSnapshot, assessmentSnapshot, result)
+    store.setAssessment(patientSnapshot.id, assessmentSnapshot, result)
+    if (shouldUseAi) {
+      void runAiInBackground({
+        patientId: patientSnapshot.id,
+        triageAt,
+        assessmentSnapshot,
+        patientSnapshot,
+        configSnapshot,
+      })
+    }
+
     await router.push(`/paciente/${patient.value.id}/resultado`)
   } finally {
-    clearAiSplashTimer()
     loading.value = false
-    aiSplashVisible.value = false
-    aiSplashEligible.value = false
   }
 }
 </script>
