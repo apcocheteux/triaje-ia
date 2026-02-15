@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
-import type { AppState, Patient, AiConfig, TriageAssessment, TriageResult } from '../domain/types'
+import type { AiConfig, AiTokenEvent, AppState, Patient, TriageAssessment, TriageResult } from '../domain/types'
 import { localStorageAdapter } from '../adapters/storage/localStorage'
 import { buildDemoPatients } from '../data/demoPatients'
+import { migrateAiConfigTokens } from '../domain/aiTokens'
 
 const VERSION = 'v1'
 
@@ -9,6 +10,7 @@ export const defaultAiConfig: AiConfig = {
   enabled: false,
   provider: 'gemini',
   apiKey: '',
+  tokens: [],
   model: 'gemini-2.5-flash',
 }
 
@@ -16,8 +18,20 @@ const defaultState = (): AppState => ({
   version: VERSION,
   updatedAt: new Date().toISOString(),
   patients: [],
-  config: { ...defaultAiConfig },
+  config: { ...defaultAiConfig, tokens: [] },
 })
+
+const migrateAiConfig = (config: AiConfig): AiConfig => {
+  const provider = config.provider === 'openai' ? 'openai' : 'gemini'
+  const model = config.model?.trim() || defaultAiConfig.model
+  return {
+    enabled: Boolean(config.enabled),
+    provider,
+    model: provider === 'gemini' && model === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : model,
+    apiKey: '',
+    tokens: migrateAiConfigTokens({ ...config, provider, model }),
+  }
+}
 
 export const useAppStore = defineStore('app', {
   state: (): AppState => {
@@ -25,9 +39,7 @@ export const useAppStore = defineStore('app', {
     if (!loaded || loaded.version !== VERSION) {
       return defaultState()
     }
-    if (loaded.config.provider === 'gemini' && loaded.config.model === 'gemini-1.5-flash') {
-      loaded.config.model = 'gemini-2.5-flash'
-    }
+    loaded.config = migrateAiConfig({ ...defaultAiConfig, ...loaded.config })
     return loaded
   },
   getters: {
@@ -81,8 +93,28 @@ export const useAppStore = defineStore('app', {
       this.updatedAt = new Date().toISOString()
     },
     updateConfig(config: Partial<AiConfig>) {
-      this.config = { ...this.config, ...config }
+      this.config = migrateAiConfig({ ...this.config, ...config })
       this.updatedAt = new Date().toISOString()
+    },
+    recordAiTokenEvents(events: AiTokenEvent[]) {
+      if (!events.length) return
+      let touched = false
+      events.forEach((event) => {
+        const token = this.config.tokens.find((candidate) => candidate.id === event.tokenId && candidate.provider === event.provider)
+        if (!token) return
+        if (event.usedAt) {
+          token.lastUsedAt = event.usedAt
+          touched = true
+        }
+        if (event.errorAt) {
+          token.lastErrorAt = event.errorAt
+          token.lastError = event.errorMessage || 'Error desconocido'
+          touched = true
+        }
+      })
+      if (touched) {
+        this.updatedAt = new Date().toISOString()
+      }
     },
     loadDemo() {
       if (this.patients.length) return

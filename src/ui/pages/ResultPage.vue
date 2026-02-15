@@ -31,31 +31,61 @@
 
     <div class="metrics-grid">
       <div class="card priority-output-card" :class="`priority-tone-${result.priority}`">
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+        <div class="priority-output-head">
           <h2 class="card-title" style="margin: 0;">Prioridad de triaje</h2>
           <span class="badge">SET orientativo</span>
         </div>
-        <div class="priority-output-value">P{{ result.priority }}</div>
-        <div class="priority-output-name">{{ priorityInfo?.label }}</div>
+        <div class="priority-output-main">
+          <div>
+            <div class="priority-output-value">P{{ result.priority }}</div>
+            <div class="priority-output-name">{{ priorityInfo?.label }}</div>
+          </div>
+        </div>
         <div v-if="result.priorityModifiedByAi && result.deterministicPriority" class="priority-output-original">
           Modificado por IA · SET original P{{ result.deterministicPriority }} ({{ deterministicPriorityInfo?.label }})
         </div>
-        <div class="priority-output-justification-head">
-          Justificación de prioridad
-          <span v-if="hasAiPriorityJustification" class="ia-indicator">✨ IA</span>
+        <div class="priority-output-section">
+          <div class="priority-output-justification-head">
+            <span>Justificación de prioridad</span>
+            <span v-if="hasAiPriorityJustification" class="ia-indicator">✦ IA</span>
+          </div>
+          <p class="priority-output-reason">{{ priorityJustification }}</p>
         </div>
-        <div class="priority-output-reason">{{ priorityJustification }}</div>
-        <div class="priority-output-time">Dolor EVA actual: {{ assessment?.dolor ?? 'ND' }}/10</div>
-        <div class="priority-output-time">
-          Tiempo máximo recomendado (orientativo): {{ priorityInfo?.waitLabel }}
+
+        <div class="priority-output-section">
+          <div class="priority-meta-grid">
+            <div class="priority-meta-item">
+              <span class="priority-meta-label">Tiempo máximo recomendado</span>
+              <span class="priority-meta-value">{{ priorityInfo?.waitLabel }}</span>
+            </div>
+            <div class="priority-meta-item">
+              <span class="priority-meta-label">Hora de triaje</span>
+              <span class="priority-meta-value">{{ triageDateLabel }}</span>
+            </div>
+          </div>
+
+          <div class="eva-meter-block" :class="evaToneClass">
+            <div class="eva-meter-head">
+              <span>Dolor EVA</span>
+              <strong>{{ evaValue !== undefined ? `${evaValue}/10` : 'ND' }}</strong>
+            </div>
+            <div
+              class="eva-meter"
+              role="progressbar"
+              aria-label="Dolor EVA"
+              :aria-valuemin="0"
+              :aria-valuemax="10"
+              :aria-valuenow="evaValue || 0"
+            >
+              <span class="eva-meter-fill" :style="{ width: `${evaPercent}%` }"></span>
+            </div>
+          </div>
+
+          <div class="priority-output-remaining" :class="remainingAttention.statusClass">
+            Tiempo restante total: {{ remainingAttention.label }}
+          </div>
+          <div v-if="aiPriorityNote" class="priority-ai-note">{{ aiPriorityNote }}</div>
         </div>
-        <div class="priority-output-time">
-          Hora de triaje: {{ triageDateLabel }}
-        </div>
-        <div class="priority-output-remaining" :class="remainingAttention.statusClass">
-          Tiempo restante total: {{ remainingAttention.label }}
-        </div>
-        <div v-if="aiPriorityNote" class="priority-ai-note">{{ aiPriorityNote }}</div>
 
         <div class="priority-scale">
           <div
@@ -73,16 +103,31 @@
       </div>
 
       <div class="card gcs-output-card" :class="glasgowVisual.className">
-        <div>
+        <div class="gcs-output-header">
           <h2 class="card-title" style="margin-bottom: 4px;">Escala de Glasgow</h2>
           <p class="page-subtitle">Valor calculado automáticamente con la respuesta ocular, verbal y motora.</p>
         </div>
-        <div class="gcs-output-value">{{ glasgowScore ?? 'ND' }}<small>/15</small></div>
-        <div class="gcs-output-meta">
-          {{ glasgowVisual.label }}
-          <span v-if="assessment?.glasgow">
-            · O{{ assessment?.glasgow?.ocular ?? '-' }} V{{ assessment?.glasgow?.verbal ?? '-' }} M{{ assessment?.glasgow?.motor ?? '-' }}
-          </span>
+        <div class="gcs-output-main">
+          <div class="gcs-output-value">{{ glasgowScore ?? 'ND' }}<small>/15</small></div>
+          <div class="gcs-output-meta">
+            {{ glasgowVisual.label }}
+            <span v-if="assessment?.glasgow">
+              · O{{ assessment?.glasgow?.ocular ?? '-' }} V{{ assessment?.glasgow?.verbal ?? '-' }} M{{ assessment?.glasgow?.motor ?? '-' }}
+            </span>
+          </div>
+        </div>
+
+        <div class="gcs-band-grid">
+          <div v-for="band in glasgowBands" :key="band.range" class="gcs-band-item" :class="{ active: band.active }">
+            <div class="gcs-band-range">{{ band.range }}</div>
+            <div class="gcs-band-label">{{ band.label }}</div>
+            <div class="gcs-band-note">{{ band.note }}</div>
+          </div>
+        </div>
+
+        <div class="gcs-guidance">
+          <span class="gcs-guidance-label">Interpretación clínica orientativa</span>
+          <p>{{ glasgowGuidance }}</p>
         </div>
       </div>
     </div>
@@ -91,7 +136,7 @@
       <div class="card">
         <h2 class="card-title">
           Resumen clínico
-          <span v-if="aiJson" class="ia-indicator">✨ IA</span>
+          <span v-if="aiJson" class="ia-indicator">✦ IA</span>
         </h2>
         <p class="page-subtitle">
           {{ aiJson?.resumen_clinico || fallbackSummary }}
@@ -100,7 +145,7 @@
         <div class="section-divider"></div>
         <h3 class="card-title">
           Sospecha clínica orientativa
-          <span v-if="hasAiClinicalSuspicion" class="ia-indicator">✨ IA</span>
+          <span v-if="hasAiClinicalSuspicion" class="ia-indicator">✦ IA</span>
         </h3>
         <p class="page-subtitle">Prediagnóstico orientativo para guiar la valoración de medicina y enfermería.</p>
         <div class="list" style="margin-top: 10px;">
@@ -135,42 +180,59 @@
 
         <div v-if="aiJson" class="section-divider"></div>
         <div v-if="aiJson" class="ia-block">
-          <h3 class="card-title">Plan ampliado por IA <span class="ia-indicator">✨ IA</span></h3>
+          <div class="ia-block-head">
+            <h3 class="card-title" style="margin: 0;">Plan ampliado por IA</h3>
+            <span class="ia-indicator">✦ IA</span>
+          </div>
+          <p class="page-subtitle">Plan orientativo estructurado por acciones, vigilancia y escalada.</p>
 
-          <div v-if="(aiJson.actuaciones_enfermeras || []).length" class="ia-list-block">
-            <h4>Actuaciones recomendadas</h4>
-            <div class="list">
-              <div v-for="action in aiJson.actuaciones_enfermeras" :key="`ai-action-${action}`" class="badge">{{ action }}</div>
-            </div>
+          <div class="ia-layout">
+            <section class="ia-panel">
+              <h4 class="ia-panel-title">Qué hacer ahora</h4>
+
+              <div v-if="aiImmediateActions.length" class="ia-top-actions">
+                <article v-for="(action, index) in aiImmediateActions" :key="`ai-now-${action}`" class="ia-top-action-card">
+                  <span class="ia-step-index">{{ index + 1 }}</span>
+                  <p>{{ action }}</p>
+                </article>
+              </div>
+
+              <div v-if="aiTimelineItems.length" class="ia-list-block">
+                <h5 class="ia-subtitle">Priorización temporal</h5>
+                <div class="ia-timeline">
+                  <article v-for="item in aiTimelineItems" :key="`ai-priority-${item.slot}-${item.action}`" class="ia-timeline-item">
+                    <span class="ia-time-chip">{{ item.slot }}</span>
+                    <p>{{ item.action }}</p>
+                  </article>
+                </div>
+              </div>
+            </section>
+
+            <section class="ia-panel">
+              <h4 class="ia-panel-title">Vigilancia y escalada</h4>
+
+              <div v-if="aiObjetivosMonitorizacion.length" class="ia-list-block">
+                <h5 class="ia-subtitle">Monitorización sugerida</h5>
+                <ul class="ia-checklist">
+                  <li v-for="item in aiObjetivosMonitorizacion" :key="`ai-monitor-${item}`">{{ item }}</li>
+                </ul>
+              </div>
+
+              <div v-if="aiCriteriosEscalada.length" class="ia-list-block">
+                <h5 class="ia-subtitle">Criterios de escalada</h5>
+                <ul class="ia-checklist ia-checklist-critical">
+                  <li v-for="item in aiCriteriosEscalada" :key="`ai-escalation-${item}`">{{ item }}</li>
+                </ul>
+              </div>
+            </section>
           </div>
 
-          <div v-if="aiActuacionesPriorizadas.length" class="ia-list-block">
-            <h4>Priorización temporal (IA)</h4>
-            <div class="list">
-              <div v-for="item in aiActuacionesPriorizadas" :key="`ai-priority-${item}`" class="badge">{{ item }}</div>
-            </div>
-          </div>
-
-          <div v-if="aiObjetivosMonitorizacion.length" class="ia-list-block">
-            <h4>Monitorización sugerida (IA)</h4>
-            <div class="list">
-              <div v-for="item in aiObjetivosMonitorizacion" :key="`ai-monitor-${item}`" class="badge">{{ item }}</div>
-            </div>
-          </div>
-
-          <div v-if="aiCriteriosEscalada.length" class="ia-list-block">
-            <h4>Criterios de escalada (IA)</h4>
-            <div class="list">
-              <div v-for="item in aiCriteriosEscalada" :key="`ai-escalation-${item}`" class="badge">{{ item }}</div>
-            </div>
-          </div>
-
-          <div v-if="aiPreguntasClave.length" class="ia-list-block">
-            <h4>Preguntas clínicas sugeridas (IA)</h4>
-            <div class="list">
-              <div v-for="item in aiPreguntasClave" :key="`ai-question-${item}`" class="badge">{{ item }}</div>
-            </div>
-          </div>
+          <details v-if="aiPreguntasClave.length" class="ia-questions-accordion">
+            <summary>Preguntas clínicas sugeridas por IA</summary>
+            <ul class="ia-question-list">
+              <li v-for="item in aiPreguntasClave" :key="`ai-question-${item}`">{{ item }}</li>
+            </ul>
+          </details>
         </div>
 
         <div class="section-divider"></div>
@@ -188,7 +250,7 @@
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
         <h2 class="card-title" style="margin: 0;">
           Evolutivo de triaje
-          <span v-if="result.ai" class="ia-indicator">✨ IA</span>
+          <span v-if="result.ai" class="ia-indicator">✦ IA</span>
         </h2>
         <button type="button" class="button secondary" @click="handleCopyEvolutivo">Copiar evolutivo</button>
       </div>
@@ -225,6 +287,7 @@ import { useRoute, RouterLink } from 'vue-router'
 import { useAppStore } from '../../application/store'
 import { exportAdapter } from '../../adapters/export'
 import { getGlasgowVisualState, resolveGlasgowScore } from '../../domain/glasgow'
+import { getProviderTokens } from '../../domain/aiTokens'
 import { getPriorityInfo, getRemainingAttention, priorityScaleOrder } from '../../domain/priority'
 import type { ClinicalArea, Priority } from '../../domain/types'
 
@@ -240,11 +303,36 @@ const aiActuacionesPriorizadas = computed(() => aiJson.value?.actuaciones_priori
 const aiObjetivosMonitorizacion = computed(() => aiJson.value?.objetivos_monitorizacion ?? [])
 const aiCriteriosEscalada = computed(() => aiJson.value?.criterios_escalada ?? [])
 const aiPreguntasClave = computed(() => aiJson.value?.preguntas_clave ?? [])
+const aiImmediateActions = computed(() => {
+  const directActions = aiJson.value?.actuaciones_enfermeras ?? []
+  const source = directActions.length ? directActions : aiActuacionesPriorizadas.value
+  return Array.from(new Set(source.map((item) => item.trim()).filter(Boolean))).slice(0, 3)
+})
+const aiTimelineItems = computed(() =>
+  aiActuacionesPriorizadas.value
+    .map((item, index) => {
+      const trimmed = item.trim()
+      if (!trimmed) return null
+      const parts = trimmed.match(/^([^:]+):\s*(.+)$/)
+      if (parts) {
+        return {
+          slot: parts[1]?.trim() || `Paso ${index + 1}`,
+          action: parts[2]?.trim() || trimmed,
+        }
+      }
+      return {
+        slot: `Paso ${index + 1}`,
+        action: trimmed,
+      }
+    })
+    .filter((item): item is { slot: string; action: string } => item !== null)
+)
 const aiPriorityJustification = computed(() => aiJson.value?.motivo_prioridad?.trim() ?? '')
 const isAiPending = computed(() => Boolean(result.value?.aiPending))
 const isAiPriorityPending = computed(() => Boolean(result.value?.aiPriorityPending))
 const hasAiPriorityApplied = computed(() => Boolean(result.value?.aiPriorityApplied))
 const hasAiPriorityJustification = computed(() => Boolean(aiPriorityJustification.value || hasAiPriorityApplied.value))
+const hasConfiguredTokens = computed(() => getProviderTokens(store.config, store.config.provider).length > 0)
 const aiSuggestedPriority = computed(() => {
   const value = aiJson.value?.prioridad_sugerida
   return value === 1 || value === 2 || value === 3 || value === 4 || value === 5 ? value : undefined
@@ -323,10 +411,10 @@ const aiExecutionSummary = computed(() => {
     }
   }
 
-  if (store.config.enabled && !store.config.apiKey.trim()) {
+  if (store.config.enabled && !hasConfiguredTokens.value) {
     return {
       className: '',
-      label: 'IA activada en configuración, pero falta API key.',
+      label: 'IA activada en configuración, pero no hay tokens disponibles para este proveedor.',
     }
   }
 
@@ -443,6 +531,63 @@ const glasgowScore = computed(() => {
 })
 
 const glasgowVisual = computed(() => getGlasgowVisualState(glasgowScore.value))
+const evaValue = computed(() => {
+  const eva = assessment.value?.dolor
+  if (typeof eva !== 'number' || Number.isNaN(eva)) return undefined
+  return Math.min(10, Math.max(1, Math.round(eva)))
+})
+const evaPercent = computed(() => ((evaValue.value ?? 0) / 10) * 100)
+const evaToneClass = computed(() => {
+  if (evaValue.value === undefined) return 'eva-tone-unknown'
+  if (evaValue.value >= 8) return 'eva-tone-high'
+  if (evaValue.value >= 5) return 'eva-tone-medium'
+  return 'eva-tone-low'
+})
+const glasgowBands = computed(() => {
+  const score = glasgowScore.value
+  return [
+    {
+      range: '15',
+      label: 'Normal',
+      note: 'Neurológico conservado',
+      active: score === 15,
+    },
+    {
+      range: '13-14',
+      label: 'Leve',
+      note: 'Reevaluación periódica',
+      active: score !== undefined && score >= 13 && score <= 14,
+    },
+    {
+      range: '9-12',
+      label: 'Moderado',
+      note: 'Observación estrecha',
+      active: score !== undefined && score >= 9 && score <= 12,
+    },
+    {
+      range: '3-8',
+      label: 'Severo',
+      note: 'Valorar vía aérea urgente',
+      active: score !== undefined && score <= 8,
+    },
+  ]
+})
+const glasgowGuidance = computed(() => {
+  const score = glasgowScore.value
+  if (score === undefined) {
+    return 'Completa ocular, verbal y motora para obtener la interpretación orientativa.'
+  }
+  if (score <= 8) {
+    return 'Riesgo alto de compromiso neurológico. Priorizar valoración médica inmediata y soporte de vía aérea según protocolo.'
+  }
+  if (score <= 12) {
+    return 'Compromiso neurológico moderado. Requiere reevaluación frecuente y vigilancia de deterioro.'
+  }
+  if (score <= 14) {
+    return 'Alteración neurológica leve. Mantener monitorización y revalorar si aparecen signos de empeoramiento.'
+  }
+  return 'Estado neurológico conservado en esta valoración. Mantener reevaluación clínica según contexto.'
+})
 
 const patientClinicalBadges = computed(() => {
   if (!patient.value) return []

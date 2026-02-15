@@ -233,8 +233,8 @@
       Faltan datos clave: {{ missingData.join(', ') }}.
     </div>
 
-    <div v-if="store.config.enabled && !store.config.apiKey" class="notice">
-      La IA está activada pero falta la API key en Configuración. Se usará solo el motor determinista.
+    <div v-if="isAiMissingTokens" class="notice">
+      La IA está activada pero no hay tokens disponibles para este proveedor. Se usará solo el motor determinista.
     </div>
 
     <div style="display: flex; gap: 12px; flex-wrap: wrap;">
@@ -262,7 +262,8 @@ import {
   glasgowOcularOptions,
   glasgowVerbalOptions,
 } from '../../domain/glasgow'
-import { generateAiPriority, generateAiTriage } from '../../adapters/ai'
+import { getProviderTokens } from '../../domain/aiTokens'
+import { extractAiTokenEvents, generateAiPriority, generateAiTriage } from '../../adapters/ai'
 
 type TriageAssessmentForm = Omit<TriageAssessment, 'glasgow'> & {
   glasgow: NonNullable<TriageAssessment['glasgow']>
@@ -379,6 +380,7 @@ watch(
 )
 
 const missingData = computed(() => computeMissingData(form))
+const isAiMissingTokens = computed(() => store.config.enabled && getProviderTokens(store.config).length === 0)
 
 const loading = ref(false)
 const toPriority = (value: number | undefined): Priority | undefined =>
@@ -457,6 +459,7 @@ const runAiInBackground = async ({
   const priorityTask = (async () => {
     try {
       const aiPriority = await generateAiPriority(assessmentSnapshot, patientSnapshot, configSnapshot)
+      store.recordAiTokenEvents(aiPriority.tokenEvents || [])
       updateLiveResult(({ updatedResult }) => {
         const suggestedPriority = toPriority(aiPriority.prioridad_sugerida)
         const priorityApplied = applyAiPrioritySuggestion({
@@ -470,6 +473,7 @@ const runAiInBackground = async ({
         updatedResult.aiPriorityLatencyMs = Date.now() - priorityStartedAt
       })
     } catch (error) {
+      store.recordAiTokenEvents(extractAiTokenEvents(error))
       const message = error instanceof Error ? error.message : 'Error al calcular prioridad con IA'
       updateLiveResult(({ updatedResult }) => {
         updatedResult.aiPriorityPending = false
@@ -485,6 +489,7 @@ const runAiInBackground = async ({
   const fullTask = (async () => {
     try {
       const ai = await generateAiTriage(assessmentSnapshot, patientSnapshot, configSnapshot)
+      store.recordAiTokenEvents(ai.tokenEvents || [])
       updateLiveResult(({ updatedResult }) => {
         updatedResult.ai = ai
         updatedResult.aiError = undefined
@@ -505,6 +510,7 @@ const runAiInBackground = async ({
         }
       })
     } catch (error) {
+      store.recordAiTokenEvents(extractAiTokenEvents(error))
       const message = error instanceof Error ? error.message : 'Error al usar IA'
       updateLiveResult(({ updatedResult }) => {
         updatedResult.aiError = message
@@ -530,8 +536,8 @@ const handleTriage = async () => {
     const result = computeTriage(assessmentSnapshot, patientSnapshot)
     const triageAt = new Date().toISOString()
     result.triageAt = triageAt
-    const hasApiKey = Boolean(store.config.apiKey.trim())
-    const shouldUseAi = store.config.enabled && hasApiKey
+    const hasAvailableTokens = getProviderTokens(store.config).length > 0
+    const shouldUseAi = store.config.enabled && hasAvailableTokens
     result.aiAttempted = shouldUseAi
     result.aiProvider = shouldUseAi ? store.config.provider : undefined
     result.aiModel = shouldUseAi ? store.config.model : undefined
@@ -541,8 +547,8 @@ const handleTriage = async () => {
     result.aiPriorityError = undefined
     result.aiPriorityLatencyMs = undefined
 
-    if (store.config.enabled && !hasApiKey) {
-      result.aiError = 'IA activada sin API key en Configuración.'
+    if (store.config.enabled && !hasAvailableTokens) {
+      result.aiError = 'IA activada sin tokens disponibles en Configuración.'
       result.aiPending = false
       result.aiPriorityPending = false
     }

@@ -15,6 +15,20 @@ const isJsonParsingIssue = (error: unknown) =>
       error.message.includes('JSON'))) ||
   (typeof error === 'object' && error !== null && 'name' in error && error.name === 'ZodError')
 
+const buildGeminiHttpError = async (response: Response) => {
+  let details = ''
+  try {
+    const body = await response.text()
+    details = body.replace(/\s+/g, ' ').trim().slice(0, 180)
+  } catch {
+    details = ''
+  }
+  const message = details ? `Gemini error ${response.status}: ${details}` : `Gemini error ${response.status}`
+  const error = new Error(message) as Error & { status?: number }
+  error.status = response.status
+  return error
+}
+
 export const geminiAdapter: AiProviderPort = {
   async generate(assessment: TriageAssessment, patient: Patient, config: AiConfig): Promise<AiTriageResponse> {
     if (!config.apiKey) {
@@ -51,7 +65,7 @@ export const geminiAdapter: AiProviderPort = {
       }
 
       if (!response.ok) {
-        throw new Error(`Gemini error ${response.status}`)
+        throw await buildGeminiHttpError(response)
       }
 
       const data = (await response.json()) as {
@@ -122,7 +136,7 @@ export const geminiAdapter: AiProviderPort = {
       }
 
       if (!response.ok) {
-        throw new Error(`Gemini error ${response.status}`)
+        throw await buildGeminiHttpError(response)
       }
 
       const data = (await response.json()) as {

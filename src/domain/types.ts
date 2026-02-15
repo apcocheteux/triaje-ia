@@ -22,6 +22,25 @@ export type ClinicalArea =
 
 export type AiProvider = 'gemini' | 'openai'
 
+export interface AiToken {
+  id: string
+  provider: AiProvider
+  value: string
+  createdAt: string
+  lastUsedAt?: string
+  lastErrorAt?: string
+  lastError?: string
+}
+
+export interface AiTokenEvent {
+  tokenId: string
+  provider: AiProvider
+  usedAt?: string
+  errorAt?: string
+  errorMessage?: string
+  statusCode?: number
+}
+
 export interface VitalSigns {
   hr?: number
   rr?: number
@@ -70,12 +89,18 @@ export interface AiTriageJson {
 export interface AiTriageResponse {
   json: AiTriageJson
   rawText: string
+  tokenId?: string
+  tokenSuffix?: string
+  tokenEvents?: AiTokenEvent[]
 }
 
 export interface AiPriorityResponse {
   prioridad_sugerida: Priority
   motivo_prioridad: string
   rawText: string
+  tokenId?: string
+  tokenSuffix?: string
+  tokenEvents?: AiTokenEvent[]
 }
 
 export interface TriageResult {
@@ -140,7 +165,8 @@ export interface Patient {
 export interface AiConfig {
   enabled: boolean
   provider: AiProvider
-  apiKey: string
+  apiKey: string // Legacy, kept for migration compatibility
+  tokens: AiToken[]
   model: string
 }
 

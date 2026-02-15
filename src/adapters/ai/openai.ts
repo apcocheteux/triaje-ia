@@ -15,6 +15,20 @@ const isJsonParsingIssue = (error: unknown) =>
       error.message.includes('JSON'))) ||
   (typeof error === 'object' && error !== null && 'name' in error && error.name === 'ZodError')
 
+const buildOpenAiHttpError = async (response: Response) => {
+  let details = ''
+  try {
+    const body = await response.text()
+    details = body.replace(/\s+/g, ' ').trim().slice(0, 180)
+  } catch {
+    details = ''
+  }
+  const message = details ? `OpenAI error ${response.status}: ${details}` : `OpenAI error ${response.status}`
+  const error = new Error(message) as Error & { status?: number }
+  error.status = response.status
+  return error
+}
+
 export const openAiAdapter: AiProviderPort = {
   async generate(assessment: TriageAssessment, patient: Patient, config: AiConfig): Promise<AiTriageResponse> {
     if (!config.apiKey) {
@@ -53,7 +67,7 @@ export const openAiAdapter: AiProviderPort = {
       }
 
       if (!response.ok) {
-        throw new Error(`OpenAI error ${response.status}`)
+        throw await buildOpenAiHttpError(response)
       }
 
       const data = (await response.json()) as {
@@ -126,7 +140,7 @@ export const openAiAdapter: AiProviderPort = {
       }
 
       if (!response.ok) {
-        throw new Error(`OpenAI error ${response.status}`)
+        throw await buildOpenAiHttpError(response)
       }
 
       const data = (await response.json()) as {

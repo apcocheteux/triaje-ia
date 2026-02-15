@@ -47,5 +47,5 @@ test('crea paciente y completa flujo minimo hasta resultado', async ({ page }) =
   await expect(page).toHaveURL(/\/resultado$/)
   await expect(page.getByRole('heading', { name: 'Resultado de triaje' })).toBeVisible()
   await expect(page.getByText('Prioridad de triaje')).toBeVisible()
-  await expect(page.getByText(/Dolor EVA actual:/)).toBeVisible()
+  await expect(page.getByText('Dolor EVA', { exact: true })).toBeVisible()
 })

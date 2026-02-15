@@ -42,6 +42,7 @@ import { RouterLink, RouterView } from 'vue-router'
 import ueHeaderLogo from './assets/ue-logo-new.svg'
 import appLogo from './assets/logo-app.png'
 import { useAppStore } from './application/store'
+import { getProviderTokens } from './domain/aiTokens'
 
 const store = useAppStore()
 
@@ -50,8 +51,9 @@ const footerAiStatus = computed(() => {
     return { className: 'ai-off', label: 'IA: desactivada' }
   }
 
-  if (!store.config.apiKey.trim()) {
-    return { className: 'ai-warning', label: 'IA: activa sin API key' }
+  const tokenCount = getProviderTokens(store.config, store.config.provider).length
+  if (!tokenCount) {
+    return { className: 'ai-warning', label: 'IA: activa sin tokens para el proveedor actual' }
   }
 
   const latestAiAttempt = store.patients
@@ -63,7 +65,7 @@ const footerAiStatus = computed(() => {
     })[0]
 
   if (!latestAiAttempt?.result) {
-    return { className: 'ai-warning', label: 'IA: activa (pendiente de primera ejecución)' }
+    return { className: 'ai-warning', label: `IA: activa (${tokenCount} token${tokenCount > 1 ? 's' : ''}, pendiente de primera ejecución)` }
   }
 
   if (latestAiAttempt.result.aiPending) {
